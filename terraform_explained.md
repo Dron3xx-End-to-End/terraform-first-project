@@ -108,7 +108,7 @@ This was one of the key fixes. The original setup used a mismatched AMI and DNF 
 ```hcl
 resource "aws_security_group" "terraform-first-project-sg" {
   name        = "terraform-first-project-sg"
-  description = "Allow HTTP inbound traffic to the EC2 instances"
+  description = "Allow HTTP and SSH inbound traffic to the EC2 instances"
 
   vpc_id = module.vpc.vpc_id
 
@@ -290,7 +290,7 @@ Why this matters:
 
 The final project does this:
 
-1. Creates a VPC with public/private subnets in two regions/availability zones.
+1. Creates a VPC with public/private subnets in two availability zones.
 2. Creates two EC2 instances in the public subnets.
 3. Installs Apache on both EC2 instances during startup.
 4. Creates a simple HTML page on each instance.
