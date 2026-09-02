@@ -34,9 +34,15 @@ The ELB distributes incoming HTTP traffic between the two EC2 instances and perf
 
 ## Files
 
-- `main.tf` - Terraform infrastructure configuration
+- `providers.tf` - Terraform and AWS provider versions, region, and profile
+- `vpc.tf` - VPC, public subnets, and private subnets
+- `security_groups.tf` - ELB and EC2 security groups
+- `ec2.tf` - AMI lookup and two Apache web servers
+- `elb.tf` - classic ELB, listener, and health checks
 - `terraform_explained.md` - detailed explanation of the infrastructure and implementation
-- `.gitignore` - excludes Terraform state files and local configuration
+- `.gitignore` - excludes local Terraform files and state from version control
+
+Terraform automatically loads all `.tf` files in this directory as one configuration. The files are separated by responsibility for readability; they do not represent separate Terraform programs.
 
 ## Prerequisites
 
@@ -85,7 +91,7 @@ terraform destroy
 ## Security notes
 
 - The EC2 instances allow HTTP only from the ELB security group.
-- SSH access should be restricted to a trusted admin IP using a CIDR block such as `YOUR_PUBLIC_IP/32`.
+- SSH is currently open to `0.0.0.0/0`; restrict it to a trusted admin IP using a CIDR block such as `YOUR_PUBLIC_IP/32` before production use.
 - The ELB accepts HTTP on port 80 from the internet.
 
 ## Notes

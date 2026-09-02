@@ -103,20 +103,20 @@ Why this matters:
 
 This was one of the key fixes. The original setup used a mismatched AMI and DNF commands, which caused the web server not to be installed correctly.
 
-## 5) Security group for EC2 instances
+## 5) Security groups
 
 ```hcl
 resource "aws_security_group" "terraform-first-project-sg" {
   name        = "terraform-first-project-sg"
-  description = "Allow HTTP and SSH inbound traffic to the EC2 instances"
+  description = "Allow HTTP inbound traffic to the EC2 instances"
 
   vpc_id = module.vpc.vpc_id
 
   ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
+    security_groups = [aws_security_group.terraform-first-project-elb-sg.id]
   }
 
   ingress {
@@ -140,15 +140,18 @@ resource "aws_security_group" "terraform-first-project-sg" {
 ```
 
 What this does:
-- allows inbound traffic to port 80 from anywhere for the web app
-- allows SSH port 22 from anywhere for admin access
+- allows inbound HTTP on port 80 only from the ELB security group
+- currently allows SSH port 22 from anywhere for admin access
 - allows outbound internet access for package installs and general service communication
 
 Why this matters:
 - the ELB health checks must reach the EC2 instances on port 80
+- direct HTTP access to the instances is blocked; requests should enter through the ELB
 - the instances need outbound access to install software and reach the internet
 
-## 6) Security group for the ELB
+The SSH rule currently uses `0.0.0.0/0` and should be restricted to a trusted administrator IP before production use.
+
+### Security group for the ELB
 
 ```hcl
 resource "aws_security_group" "terraform-first-project-elb-sg" {
@@ -184,7 +187,7 @@ What this does:
 Why this matters:
 - an ELB needs its own security group so the internet can reach it without exposing the backend infrastructure unnecessarily
 
-## 7) EC2 instances
+## 6) EC2 instances
 
 ```hcl
 resource "aws_instance" "terraform-first-project-ec2" {
@@ -235,7 +238,7 @@ Why this matters:
 
 This was the main root-cause fix. The original user data used `dnf`, which is used on Amazon Linux 2023 and some Fedora-based images, but not on Amazon Linux 2.
 
-## 8) ELB configuration
+## 7) ELB configuration
 
 ```hcl
 resource "aws_elb" "terraform-first-project-elb" {
@@ -286,7 +289,7 @@ Why this matters:
 - allows failed nodes to be removed from rotation automatically
 - prevents the load balancer from sending requests to dead instances
 
-## 9) What the whole code does now
+## 8) What the whole code does now
 
 The final project does this:
 
@@ -305,7 +308,7 @@ Internet -> ELB -> EC2 instance 1
 
 The ELB acts as the public entry point, and the EC2 web servers serve the web page.
 
-## 10) Why the health check issue happened before
+## 9) Why the health check issue happened before
 
 The old configuration used:
 - an AMI that did not match the bootstrap commands
@@ -316,7 +319,7 @@ Because the web server was not installed correctly or because the load balancer 
 
 The fix was to align the OS, package manager, application startup, and ELB networking so the port 80 health check succeeds.
 
-## 11) Final status
+## 10) Final status
 
 The project has been validated with Terraform and the configuration is currently clean:
 
