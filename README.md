@@ -1,99 +1,71 @@
 # Terraform First Project
 
-This project deploys a simple highly available web infrastructure on AWS using Terraform.
+## Overview
 
-## What this infrastructure creates
+This repository provisions a small AWS web stack in Terraform. It creates a VPC, public and private subnets, two Amazon Linux EC2 instances in the public subnets, and a classic Elastic Load Balancer that fronts the web servers on port 80. Each EC2 instance installs Apache through `user_data`, and the load balancer performs a health check against the web root.
 
-- A VPC with public and private subnets
-- Two public subnets across two Availability Zones
-- Two private subnets reserved for future infrastructure
-- Two EC2 instances in public subnets
-- An Apache HTTP server installed on each EC2 instance
-- A classic Elastic Load Balancer (ELB) in front of the EC2 instances
-- Security groups to control inbound traffic
+## Technologies Used
 
-## Architecture
-```text
-                Internet
-                   │
-                   ▼
-          Elastic Load Balancer
-                 Port 80
-                   │
-          ┌────────┴────────┐
-          ▼                 ▼
-       EC2 #1             EC2 #2
-      Apache             Apache
-      Port 80            Port 80
-```
-Traffic flow:
+- Terraform
+- AWS
+- EC2
+- ELB
+- Apache
 
-Internet → ELB → EC2 instances
+## Requirements
 
-The ELB distributes incoming HTTP traffic between the two EC2 instances and performs health checks to ensure traffic is routed only to healthy instances.
+- Terraform 1.2 or newer
+- AWS CLI configured with the `terraform-first-project` profile
+- An AWS account with permissions to create VPCs, EC2 instances, and ELBs
 
-## Files
+## Deployment
 
-- `providers.tf` - Terraform and AWS provider versions, region, and profile
-- `vpc.tf` - VPC, public subnets, and private subnets
-- `security_groups.tf` - ELB and EC2 security groups
-- `ec2.tf` - AMI lookup and two Apache web servers
-- `elb.tf` - classic ELB, listener, and health checks
-- `terraform_explained.md` - detailed explanation of the infrastructure and implementation
-- `.gitignore` - excludes local Terraform files and state from version control
-
-Terraform automatically loads all `.tf` files in this directory as one configuration. The files are separated by responsibility for readability; they do not represent separate Terraform programs.
-
-## Prerequisites
-
-- Terraform installed
-- AWS CLI configured with a profile named `terraform-first-project`
-- Access to an AWS account with permissions to create VPCs, EC2 instances, and ELBs
-
-## AWS profile setup
-
-Make sure your AWS credentials are configured:
-
-```bash
-aws configure --profile terraform-first-project
-```
-
-## Initialize Terraform
+From the project root:
 
 ```bash
 terraform init
-```
-
-## Validate the configuration
-
-```bash
 terraform validate
-```
-
-## Preview changes
-
-```bash
 terraform plan
-```
-
-## Deploy the infrastructure
-
-```bash
 terraform apply
 ```
 
-## Destroy the infrastructure
+To tear the infrastructure down:
 
 ```bash
 terraform destroy
 ```
 
-## Security notes
+## Repository Structure
 
-- The EC2 instances allow HTTP only from the ELB security group.
-- SSH is currently open to `0.0.0.0/0`; restrict it to a trusted admin IP using a CIDR block such as `YOUR_PUBLIC_IP/32` before production use.
-- The ELB accepts HTTP on port 80 from the internet.
+```text
+terraform-first-project/
+├── ec2.tf
+├── elb.tf
+├── providers.tf
+├── README.md
+├── explained.md
+├── security_groups.tf
+├── vpc.tf
+├── .gitignore
+└── .terraform.lock.hcl
+```
+
+The tracked project files are a small Terraform configuration for a single-tier AWS web environment. Local state files and generated Terraform artifacts are not described as part of the repository structure.
+
+## Current Infrastructure
+
+The current configuration creates:
+
+- a VPC with two public and two private subnets across two availability zones
+- two EC2 instances in the public subnets using Amazon Linux 2 AMIs
+- an EC2 security group permitting SSH from anywhere and HTTP only from the ELB
+- an ELB security group permitting HTTP from the internet
+- a classic ELB with a health check on `HTTP:80/`
+
+This is a straightforward EC2 + ELB deployment; it does not define autoscaling or an application tier beyond the two web servers.
 
 ## Notes
 
-This project is a basic example of using Terraform to create a small web stack behind a load balancer. The user data installs Apache and serves a simple homepage.
+- The EC2 `user_data` script installs Apache and writes a minimal home page to `/var/www/html/index.html`.
+- The ELB checks each instance on port 80 and routes traffic only to healthy targets.
+- The project is intentionally minimal and centered on a single public web tier.
