@@ -10,12 +10,6 @@ resource "aws_security_group" "terraform-first-project-sg" {
     protocol        = "tcp"
     security_groups = [aws_security_group.terraform-first-project-elb-sg.id]
   }
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
 
   egress {
     from_port   = 0
