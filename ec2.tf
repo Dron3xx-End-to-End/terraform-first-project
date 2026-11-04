@@ -66,7 +66,12 @@ data "aws_instances" "terraform-first-project-asg" {
 
   filter {
     name   = "vpc-id"
-    values = [aws_autoscaling_group.terraform-first-project-asg.name]
+    values = [module.vpc.vpc_id]
+  }
+
+  filter {
+    name   = "tag:aws:autoscaling:groupName"
+    values = ["terraform-first-project-asg"]
   }
 
   depends_on = [aws_autoscaling_group.terraform-first-project-asg]

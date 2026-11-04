@@ -25,20 +25,13 @@ resource "aws_security_group" "terraform-first-project-sg" {
 
 resource "aws_security_group" "terraform-first-project-lb-sg" {
   name        = "terraform-first-project-lb-sg"
-  description = "Allow HTTP and HTTPS traffic to the ALB"
+  description = "Allow HTTP traffic to the ALB"
 
   vpc_id = module.vpc.vpc_id
 
   ingress {
     from_port   = 80
     to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 443
-    to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }

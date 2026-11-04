@@ -10,7 +10,7 @@ resource "aws_lb" "terraform-first-project-lb" {
   }
 }
 
-resource "aws_lb_target_group" "terraform-first-project-tg" { #
+resource "aws_lb_target_group" "terraform-first-project-tg" {
   name     = "terraform-first-project-tg"
   port     = 80
   protocol = "HTTP"
