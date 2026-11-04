@@ -18,11 +18,11 @@ output "ec2_security_group_id" {
   value = aws_security_group.terraform-first-project-sg.id
 }
 
-output "elb_security_group_id" {
+output "alb_security_group_id" {
   value = aws_security_group.terraform-first-project-lb-sg.id
 }
 
-output "elb_dns" {
+output "alb_dns" {
   value = aws_lb.terraform-first-project-lb.dns_name
 }
 

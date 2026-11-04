@@ -2,81 +2,84 @@
 
 ## Architecture
 
-This project demonstrates a small AWS web stack split across public and private network tiers. A public Classic Elastic Load Balancer (ELB) receives HTTP requests from the internet and distributes them to two EC2 web servers in private subnets. The instances have private IP addresses only and accept HTTP from the ELB security group, not directly from the internet.
+The project deploys a small web tier in AWS. A public Application Load Balancer (ALB) receives HTTP requests and forwards them to an Auto Scaling Group (ASG) in private subnets. The ASG launches EC2 instances from a launch template and registers them with the ALB target group. Instances have private addresses only.
 
-The VPC module also provides an Internet Gateway for the public subnets and one shared NAT Gateway for outbound internet access from the private subnets. The NAT Gateway allows private instances to reach external services (for example, to download operating system packages) without assigning them public IP addresses.
+The VPC module creates public and private subnets, an Internet Gateway for public connectivity, and a NAT Gateway in each Availability Zone for outbound connectivity from private subnets.
 
-## 1) Terraform and AWS provider
+## 1. Terraform and AWS provider
 
-`providers.tf` requires Terraform 1.2 or newer and AWS provider `~> 6.28.0`. It configures the provider for `eu-central-1` (Frankfurt) and the local AWS profile `terraform-first-project`.
+`providers.tf` requires Terraform 1.9.0 or newer and AWS provider `~> 6.28.0`. The provider region is configurable through `aws_region`, which defaults to `eu-central-1`; credentials use the local AWS profile `terraform-first-project`.
 
-## 2) VPC, subnets, and internet connectivity
+## 2. Variables and network
 
-The VPC module in `vpc.tf` defines a VPC with CIDR `10.0.0.0/16` across two availability zones:
+`variables.tf` defines:
 
-| Network | CIDR | Purpose |
-|---|---|---|
-| Public subnet 1 | `10.0.101.0/24` | ELB and public network resources |
-| Public subnet 2 | `10.0.102.0/24` | ELB and public network resources |
-| Private subnet 1 | `10.0.1.0/24` | EC2 web server |
-| Private subnet 2 | `10.0.2.0/24` | EC2 web server |
+- `aws_region`, defaulting to `eu-central-1`
+- `ec2_instance_type`, defaulting to `t3.micro`
+- `ec2_scaling_config`, defaulting to minimum capacity 1, desired capacity 2, and maximum capacity 2
+- the VPC CIDR and lists of public and private subnet CIDRs
 
-The module is configured with `enable_nat_gateway = true` and `single_nat_gateway = true`, so there is one NAT Gateway shared by the private subnets for outbound traffic. The module creates an Internet Gateway to provide internet connectivity to the public subnets. Private instances use the NAT Gateway for outbound internet access; they do not get public addresses.
+Validations check the VPC CIDR, require non-empty subnet lists, and ensure the desired ASG capacity is within its configured limits and no greater than two.
 
-## 3) EC2 web servers
+In `vpc.tf`, available Availability Zones are discovered dynamically. The module uses as many zones as there are private subnet CIDRs and provisions the configured public and private subnets. NAT is enabled with `one_nat_gateway_per_az = true`, so each selected Availability Zone has its own NAT Gateway. The module also creates the Internet Gateway for the public subnets.
 
-`ec2.tf` looks up the most recent Amazon Linux 2 AMI matching the configured owner, name, and architecture filters rather than hardcoding an AMI ID. It creates two `t3.micro` instances, placing each in one of the private subnets:
+With the default variables, the VPC is `10.0.0.0/16`, with two public subnets (`10.0.101.0/24`, `10.0.102.0/24`) and two private subnets (`10.0.1.0/24`, `10.0.2.0/24`).
 
-```hcl
-count                       = 2
-associate_public_ip_address = false
-subnet_id                   = module.vpc.private_subnets[count.index]
-```
+## 3. Launch template and Auto Scaling Group
 
-The `user_data` startup script updates the system, installs and enables Apache (`httpd`), and writes a simple page to `/var/www/html/index.html`. The instances are registered with the ELB, which sends HTTP requests to them over their private network addresses.
+`ec2.tf` looks up the latest Amazon-owned AMI matching `al2023-ami-*` and `x86_64`. The launch template configures the selected AMI, instance type, EC2 security group, and startup script. Its network interface does not associate a public IP address.
 
-## 4) Security groups
+The startup script updates Amazon Linux 2023, installs and enables Apache (`httpd`), and writes a sample homepage to `/var/www/html/index.html`.
 
-`security_groups.tf` defines separate security groups for the ELB and the EC2 instances.
+The Auto Scaling Group:
 
-### ELB security group
+- launches instances into the private subnets
+- uses the launch template's latest version
+- takes minimum, desired, and maximum capacity from `ec2_scaling_config`
+- registers instances with the ALB target group through `target_group_arns`
+- uses ELB health checks with a 300-second grace period
+- assigns launched instances the `Name` tag `terraform-first-project-ec2`
 
-The ELB security group allows inbound TCP traffic on port 80 from `0.0.0.0/0`, making the load balancer's HTTP listener reachable from the internet. Its egress rule allows outbound traffic.
+There is no standalone `aws_instance` resource: EC2 instances are created and managed by the ASG.
 
-### EC2 security group
+## 4. Load balancer and health checks
 
-The instance security group allows inbound TCP traffic on port 80 only when it originates from the ELB security group. It has no SSH ingress rule and does not allow direct HTTP ingress from internet CIDR ranges. Its egress rule permits outbound traffic, with the private subnet's NAT route providing internet access.
+`alb.tf` defines a public ALB in the VPC's public subnets. Its target group forwards HTTP on port 80 to the EC2 instances and checks the `/` path every 30 seconds, expecting HTTP status `200`.
 
-This creates a controlled path for web requests:
+The current configuration defines a single listener: HTTP on port 80. It forwards requests to the target group.
+
+## 5. Security groups and traffic flow
+
+`security_groups.tf` defines two security groups:
+
+- **ALB security group:** allows inbound TCP on port 80 from `0.0.0.0/0`, and allows outbound traffic.
+- **EC2 security group:** allows inbound TCP on port 80 only from the ALB security group, and allows outbound traffic.
+
+The web request path is:
 
 ```text
-Internet --HTTP:80--> ELB --HTTP:80--> EC2 instances
+Internet --HTTP:80--> ALB --HTTP:80--> EC2 instances in private subnets
 ```
 
-## 5) Classic Elastic Load Balancer
+The instances do not have public IP addresses, and no SSH ingress rule is configured. For outbound internet access, the private subnets route traffic through NAT Gateways; the Internet Gateway serves public-subnet connectivity.
 
-`elb.tf` defines an `aws_elb` Classic ELB in the VPC's public subnets. It uses the ELB security group, listens for HTTP on port 80, and forwards requests to the two EC2 instances on port 80. Its health check probes `HTTP:80/` every 30 seconds; the ELB routes requests to healthy instances.
+## 6. Terraform outputs
 
-## 6) Request and outbound traffic flow
-
-1. A client on the internet sends an HTTP request to the public ELB on port 80.
-2. The ELB security group allows the request, and the ELB forwards it to a healthy EC2 instance.
-3. The EC2 security group allows that inbound HTTP connection because it comes from the ELB security group.
-4. If an instance needs outbound internet access, its private subnet uses the shared NAT Gateway; responses return through the established connection.
-
-The Internet Gateway supports the public subnets and the public ELB. It does not give the private EC2 instances public IP addresses.
-
-## 7) Terraform outputs
-
-`outputs.tf` exposes the following values:
+`outputs.tf` exposes:
 
 | Output | Value |
 |---|---|
-| `private_ips` | Private IP addresses of the two EC2 instances |
-| `ec2_instance_ids` | IDs of the two EC2 instances |
-| `ec2_availability_zones` | Availability zones of the two EC2 instances |
-| `vpc_id` | ID of the VPC created by the module |
+| `private_ips` | Private IP addresses returned by the EC2 instance lookup |
+| `ec2_instance_ids` | Instance IDs returned by the EC2 instance lookup |
+| `ec2_availability_zones` | Availability Zones associated with the Auto Scaling Group |
+| `vpc_id` | ID of the VPC |
 | `ec2_security_group_id` | ID of the EC2 security group |
-| `elb_security_group_id` | ID of the ELB security group |
-| `elb_dns` | DNS name of the ELB |
+| `alb_security_group_id` | ID of the ALB security group |
+| `alb_dns` | DNS name of the ALB |
 | `private_subnet_ids` | IDs of the private subnets |
+
+The EC2 instance lookup filters instances by the VPC ID (`module.vpc.vpc_id`) and the Auto Scaling Group name.
+
+## 7. Cost considerations
+
+AWS may charge for deployed resources. In particular, NAT Gateways are billed per gateway and for data processed, and the ALB also incurs charges. Check current AWS pricing before deployment and remove resources when they are no longer needed.

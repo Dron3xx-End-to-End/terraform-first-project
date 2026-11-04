@@ -5,7 +5,7 @@ data "aws_ami" "terraform-first-project-ami" {
 
   filter {
     name   = "name"
-    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
+    values = ["al2023-ami-*"]
   }
 
   filter {
@@ -27,8 +27,8 @@ resource "aws_launch_template" "terraform-first-project-lt" {
 
   user_data = base64encode(<<-EOF
         #!/bin/bash
-        yum update -y
-        yum install -y httpd
+        dnf update -y
+        dnf install -y httpd
         systemctl start httpd
         systemctl enable httpd
         echo "<h1>Terraform first project</h1>" > /var/www/html/index.html
@@ -57,10 +57,6 @@ resource "aws_autoscaling_group" "terraform-first-project-asg" {
     value               = "terraform-first-project-ec2"
     propagate_at_launch = true
   }
-
-  lifecycle {
-    create_before_destroy = true
-  }
 }
 
 data "aws_instances" "terraform-first-project-asg" {
@@ -70,7 +66,7 @@ data "aws_instances" "terraform-first-project-asg" {
 
   filter {
     name   = "vpc-id"
-    values = [module.vpc.vpc_id]
+    values = [aws_autoscaling_group.terraform-first-project-asg.name]
   }
 
   depends_on = [aws_autoscaling_group.terraform-first-project-asg]

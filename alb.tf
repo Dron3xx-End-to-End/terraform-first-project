@@ -41,18 +41,6 @@ resource "aws_lb_listener" "http" {
     type             = "forward"
     target_group_arn = aws_lb_target_group.terraform-first-project-tg.arn
   }
-}
-
-resource "aws_lb_listener" "https" {
-  load_balancer_arn = aws_lb.terraform-first-project-lb.arn
-  port              = 443
-  protocol          = "HTTPS"
-  certificate_arn   = var.ssl_certificate_arn
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.terraform-first-project-tg.arn
-  }
 
   tags = {
     Project = "terraform-first-project"

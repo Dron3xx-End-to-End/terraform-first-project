@@ -69,9 +69,3 @@ variable "public_subnet_cidrs" {
     error_message = "The list of public subnet CIDRs must contain at least one CIDR block."
   }
 }
-
-variable "ssl_certificate_arn" {
-  description = "ARN of the SSL certificate for HTTPS"
-  type        = string
-  default     = ""
-}

@@ -2,23 +2,21 @@
 
 ## Overview
 
-This repository provisions a small AWS web stack in Terraform. It creates a VPC with public and private subnets, a public Classic Elastic Load Balancer (ELB), and two Amazon Linux 2 EC2 web servers in private subnets. The EC2 instances have no public IP addresses. The ELB accepts HTTP traffic from the internet and forwards it to the instances; their security group permits HTTP only from the ELB's security group.
+This repository provisions an AWS web application stack using Terraform. A public Application Load Balancer (ALB) sends HTTP traffic to web servers managed by an Auto Scaling Group (ASG) in private subnets. The instances are launched from a launch template, have no public IP addresses, and install Apache through `user_data`.
 
-An Internet Gateway provides internet connectivity for the public subnets. A single NAT Gateway provides outbound internet access for resources in the private subnets. Each EC2 instance installs Apache through `user_data`, and the ELB checks the web root for instance health.
+The VPC module creates public and private subnets, an Internet Gateway, and one NAT Gateway per Availability Zone for outbound connectivity from private subnets.
 
-## Technologies Used
+## Technologies
 
 - Terraform
-- AWS
-- EC2
-- ELB
-- Apache
+- AWS VPC, EC2, Auto Scaling, and Application Load Balancer
+- Apache HTTP Server
 
 ## Requirements
 
-- Terraform 1.2 or newer
+- Terraform 1.9.0 or newer
 - AWS CLI configured with the `terraform-first-project` profile
-- An AWS account with permissions to create VPCs, EC2 instances, and ELBs
+- An AWS account with permissions to create VPC, NAT Gateway, EC2, Auto Scaling, and ALB resources
 
 ## Deployment
 
@@ -37,55 +35,59 @@ To tear the infrastructure down:
 terraform destroy
 ```
 
+Review the plan before applying it. **Deploying this infrastructure can incur AWS charges, particularly for NAT Gateways and the ALB.** Review current AWS pricing and destroy resources when they are no longer needed.
+
 ## Repository Structure
 
 ```text
 terraform-first-project/
+├── alb.tf
 ├── ec2.tf
-├── elb.tf
 ├── outputs.tf
 ├── providers.tf
 ├── README.md
 ├── explained.md
 ├── security_groups.tf
+├── variables.tf
 ├── vpc.tf
 ├── .gitignore
 └── .terraform.lock.hcl
 ```
 
-The tracked project files are a small Terraform configuration for a single-tier AWS web environment. Local state files and generated Terraform artifacts are not described as part of the repository structure.
+Terraform state and other generated local files are not included in this listing.
 
 ## Current Infrastructure
 
-The current configuration creates:
+The configuration defines:
 
-- a VPC (`10.0.0.0/16`) with two public and two private subnets across `eu-central-1a` and `eu-central-1b`
-- an Internet Gateway for internet connectivity in the public subnets
-- one NAT Gateway for outbound internet traffic from the private subnets
-- two `t3.micro` EC2 instances using the latest matching Amazon Linux 2 AMI, each in a private subnet and without a public IP address
-- an EC2 security group that allows inbound HTTP on port 80 only from the ELB security group; no SSH ingress rule is configured
-- an ELB security group that allows inbound HTTP on port 80 from `0.0.0.0/0`
-- a public Classic ELB in the public subnets, forwarding HTTP on port 80 to the EC2 instances and checking `HTTP:80/`
+- A VPC with a default CIDR of `10.0.0.0/16`.
+- Public and private subnet CIDRs configurable through input variables. The defaults provide two of each, in dynamically selected available Availability Zones.
+- An Internet Gateway and a NAT Gateway in each Availability Zone. Private subnets use NAT for outbound internet access.
+- A launch template using the latest matching Amazon Linux 2023 x86_64 AMI and the configurable EC2 instance type (default `t3.micro`).
+- An Auto Scaling Group in the private subnets. Its default minimum, desired, and maximum capacities are 1, 2, and 2 instances.
+- A public ALB with an HTTP listener on port 80, forwarding to an HTTP target group on port 80. The target group checks `/` and expects status `200`.
+- An EC2 security group that allows inbound HTTP only from the ALB security group. The ALB security group allows inbound HTTP on port 80 from the internet.
 
-This is a straightforward two-server web deployment. It does not define autoscaling or an application tier beyond the EC2 instances.
+The ASG registers its instances with the ALB target group. No standalone `aws_instance` resource is defined.
 
-## Terraform outputs
+## Terraform Outputs
 
 After applying the configuration, Terraform exposes:
 
-- `private_ips` — private IP addresses of both EC2 instances
-- `ec2_instance_ids` — IDs of both EC2 instances
-- `ec2_availability_zones` — availability zones of both EC2 instances
+- `private_ips` — private IP addresses returned by the EC2 instance lookup
+- `ec2_instance_ids` — instance IDs returned by the EC2 instance lookup
+- `ec2_availability_zones` — Availability Zones associated with the Auto Scaling Group
 - `vpc_id` — ID of the VPC
-- `security_group_id` — ID of the EC2 security group
-- `elb_security_group_id` — ID of the ELB security group
-- `elb_dns` — DNS name of the ELB
+- `ec2_security_group_id` — ID of the EC2 security group
+- `alb_security_group_id` — ID of the ALB security group
+- `alb_dns` — DNS name of the ALB
 - `private_subnet_ids` — IDs of the private subnets
+
+The EC2 lookup used for `private_ips` and `ec2_instance_ids` filters by the VPC ID (`module.vpc.vpc_id`) and the Auto Scaling Group name.
 
 ## Notes
 
-- **Cost warning:** Deploying this infrastructure may incur AWS charges, particularly for the NAT Gateway and Classic ELB. Review current AWS pricing and remove resources when they are no longer needed.
-- The EC2 `user_data` script installs Apache and writes a minimal home page to `/var/www/html/index.html`.
-- The ELB checks each instance on port 80 and routes traffic only to healthy targets.
-- The instances are not directly reachable from the internet. Internet-facing HTTP traffic enters through the ELB; outbound internet access from private subnets uses the NAT Gateway.
-- The project is intentionally minimal and centered on a private web tier behind a public load balancer.
+- The launch template's startup script updates Amazon Linux, installs and enables Apache, and writes a sample page to `/var/www/html/index.html`.
+- The EC2 instances have no public IP addresses and no inbound SSH rule is configured.
+- The ALB health check routes traffic only to healthy targets.
+- `variables.tf` contains configurable region, instance type, scaling limits, and subnet/VPC CIDRs, together with input validations.
