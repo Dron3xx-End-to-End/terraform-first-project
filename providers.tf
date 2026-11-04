@@ -6,10 +6,10 @@ terraform {
     }
   }
 
-  required_version = ">= 1.2"
+  required_version = ">= 1.9.0"
 }
 
 provider "aws" {
-  region  = "eu-central-1"
+  region  = var.aws_region
   profile = "terraform-first-project"
 }

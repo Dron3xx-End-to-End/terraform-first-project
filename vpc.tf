@@ -1,15 +1,20 @@
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
 module "vpc" {
   source = "terraform-aws-modules/vpc/aws"
 
   name = "terraform-first-project-vpc"
-  cidr = "10.0.0.0/16"
+  cidr = var.vpc_cidr
 
-  azs             = ["eu-central-1a", "eu-central-1b"]
-  private_subnets = ["10.0.1.0/24", "10.0.2.0/24"]
-  public_subnets  = ["10.0.101.0/24", "10.0.102.0/24"]
+  azs             = slice(data.aws_availability_zones.available.names, 0, length(var.private_subnet_cidrs))
+  private_subnets = var.private_subnet_cidrs
+  public_subnets  = var.public_subnet_cidrs
 
-  enable_nat_gateway = true
-  single_nat_gateway = true
+  enable_nat_gateway     = true
+  single_nat_gateway     = false
+  one_nat_gateway_per_az = true
 
   tags = {
     Project     = "terraform-first-project"
