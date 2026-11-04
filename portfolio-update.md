@@ -26,7 +26,9 @@ Infrastruktura AWS zarządzana przez Terraform.
 - AWS
 - Amazon EC2
 - Amazon VPC
-- Elastic Load Balancing
+- Application Load Balancer (ALB)
+- Auto Scaling Group
+- NAT Gateway
 
 ## Status
 
