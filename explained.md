@@ -2,216 +2,81 @@
 
 ## Architecture
 
-This repository defines a minimal AWS web stack in Terraform. It creates a VPC, public and private subnets, security groups, two EC2 instances, and a classic Elastic Load Balancer that distributes traffic across the HTTP servers.
+This project demonstrates a small AWS web stack split across public and private network tiers. A public Classic Elastic Load Balancer (ELB) receives HTTP requests from the internet and distributes them to two EC2 web servers in private subnets. The instances have private IP addresses only and accept HTTP from the ELB security group, not directly from the internet.
 
-## 1) Terraform setup
+The VPC module also provides an Internet Gateway for the public subnets and one shared NAT Gateway for outbound internet access from the private subnets. The NAT Gateway allows private instances to reach external services (for example, to download operating system packages) without assigning them public IP addresses.
 
-The configuration declares the AWS provider and the required Terraform version in `providers.tf`:
+## 1) Terraform and AWS provider
 
-```hcl
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 6.28.0"
-    }
-  }
+`providers.tf` requires Terraform 1.2 or newer and AWS provider `~> 6.28.0`. It configures the provider for `eu-central-1` (Frankfurt) and the local AWS profile `terraform-first-project`.
 
-  required_version = ">= 1.2"
-}
+## 2) VPC, subnets, and internet connectivity
 
-provider "aws" {
-  region  = "eu-central-1"
-  profile = "terraform-first-project"
-}
-```
+The VPC module in `vpc.tf` defines a VPC with CIDR `10.0.0.0/16` across two availability zones:
 
-This tells Terraform to deploy the stack in Frankfurt and to authenticate using the local AWS profile named `terraform-first-project`.
+| Network | CIDR | Purpose |
+|---|---|---|
+| Public subnet 1 | `10.0.101.0/24` | ELB and public network resources |
+| Public subnet 2 | `10.0.102.0/24` | ELB and public network resources |
+| Private subnet 1 | `10.0.1.0/24` | EC2 web server |
+| Private subnet 2 | `10.0.2.0/24` | EC2 web server |
 
-## 2) VPC and subnets
+The module is configured with `enable_nat_gateway = true` and `single_nat_gateway = true`, so there is one NAT Gateway shared by the private subnets for outbound traffic. The module creates an Internet Gateway to provide internet connectivity to the public subnets. Private instances use the NAT Gateway for outbound internet access; they do not get public addresses.
 
-The VPC module in `vpc.tf` creates the network foundation:
+## 3) EC2 web servers
+
+`ec2.tf` looks up the most recent Amazon Linux 2 AMI matching the configured owner, name, and architecture filters rather than hardcoding an AMI ID. It creates two `t3.micro` instances, placing each in one of the private subnets:
 
 ```hcl
-module "vpc" {
-  source = "terraform-aws-modules/vpc/aws"
-
-  name = "terraform-first-project-vpc"
-  cidr = "10.0.0.0/16"
-
-  azs             = ["eu-central-1a", "eu-central-1b"]
-  private_subnets = ["10.0.1.0/24", "10.0.2.0/24"]
-  public_subnets  = ["10.0.101.0/24", "10.0.102.0/24"]
-}
+count                       = 2
+associate_public_ip_address = false
+subnet_id                   = module.vpc.private_subnets[count.index]
 ```
 
-The result is:
-
-- one VPC in `10.0.0.0/16`
-- two public subnets
-- two private subnets
-- a multi-AZ layout for the demo environment
-
-## 3) AMI lookup and web servers
-
-The project does not hardcode an image ID. Instead, `ec2.tf` discovers the current Amazon Linux 2 AMI with a data source:
-
-```hcl
-data "aws_ami" "terraform-first-project-ami" {
-  most_recent = true
-  owners      = ["amazon"]
-
-  filter {
-    name   = "name"
-    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
-  }
-
-  filter {
-    name   = "architecture"
-    values = ["x86_64"]
-  }
-}
-```
-
-The EC2 resource then creates two `t3.micro` servers in the public subnets:
-
-```hcl
-resource "aws_instance" "terraform-first-project-ec2" {
-  ami = data.aws_ami.terraform-first-project-ami.id
-
-  count         = 2
-  instance_type = "t3.micro"
-
-  associate_public_ip_address = true
-  subnet_id                   = module.vpc.public_subnets[count.index]
-  vpc_security_group_ids      = [aws_security_group.terraform-first-project-sg.id]
-
-  user_data = <<-EOF
-            #!/bin/bash
-            yum update -y
-            yum install -y httpd
-            systemctl start httpd
-            systemctl enable httpd
-            echo "<h1>Terraform first project</h1>" > /var/www/html/index.html
-            EOF
-}
-```
-
-What this does:
-- creates two web servers in different public subnets
-- assigns public IPs so the instances are reachable from the ELB
-- boots Apache on each host with a minimal homepage
-
-Why this matters:
-- it creates a working web tier without additional application orchestration
-- the instances become the backend targets for the load balancer
+The `user_data` startup script updates the system, installs and enables Apache (`httpd`), and writes a simple page to `/var/www/html/index.html`. The instances are registered with the ELB, which sends HTTP requests to them over their private network addresses.
 
 ## 4) Security groups
 
-The configuration defines two security groups in `security_groups.tf`.
-
-### EC2 security group
-
-```hcl
-resource "aws_security_group" "terraform-first-project-sg" {
-  name        = "terraform-first-project-sg"
-  description = "Allow HTTP inbound traffic to the EC2 instances"
-
-  ingress {
-    from_port       = 80
-    to_port         = 80
-    protocol        = "tcp"
-    security_groups = [aws_security_group.terraform-first-project-elb-sg.id]
-  }
-
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-```
-
-This allows:
-
-- HTTP traffic from the ELB security group only
-- SSH access from anywhere
+`security_groups.tf` defines separate security groups for the ELB and the EC2 instances.
 
 ### ELB security group
 
-```hcl
-resource "aws_security_group" "terraform-first-project-elb-sg" {
-  name        = "terraform-first-project-elb-sg"
-  description = "Allow HTTP traffic to the ELB"
+The ELB security group allows inbound TCP traffic on port 80 from `0.0.0.0/0`, making the load balancer's HTTP listener reachable from the internet. Its egress rule allows outbound traffic.
 
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
+### EC2 security group
+
+The instance security group allows inbound TCP traffic on port 80 only when it originates from the ELB security group. It has no SSH ingress rule and does not allow direct HTTP ingress from internet CIDR ranges. Its egress rule permits outbound traffic, with the private subnet's NAT route providing internet access.
+
+This creates a controlled path for web requests:
+
+```text
+Internet --HTTP:80--> ELB --HTTP:80--> EC2 instances
 ```
 
-This exposes the classic ELB to internet traffic while keeping direct HTTP access off the instance security group.
+## 5) Classic Elastic Load Balancer
 
-## 5) Elastic Load Balancer
+`elb.tf` defines an `aws_elb` Classic ELB in the VPC's public subnets. It uses the ELB security group, listens for HTTP on port 80, and forwards requests to the two EC2 instances on port 80. Its health check probes `HTTP:80/` every 30 seconds; the ELB routes requests to healthy instances.
 
-`elb.tf` defines a classic AWS ELB:
+## 6) Request and outbound traffic flow
 
-```hcl
-resource "aws_elb" "terraform-first-project-elb" {
-  name            = "terraform-first-project-elb"
-  subnets         = module.vpc.public_subnets
-  security_groups = [aws_security_group.terraform-first-project-elb-sg.id]
+1. A client on the internet sends an HTTP request to the public ELB on port 80.
+2. The ELB security group allows the request, and the ELB forwards it to a healthy EC2 instance.
+3. The EC2 security group allows that inbound HTTP connection because it comes from the ELB security group.
+4. If an instance needs outbound internet access, its private subnet uses the shared NAT Gateway; responses return through the established connection.
 
-  instances = aws_instance.terraform-first-project-ec2[*].id
+The Internet Gateway supports the public subnets and the public ELB. It does not give the private EC2 instances public IP addresses.
 
-  listener {
-    instance_port     = 80
-    instance_protocol = "http"
-    lb_port           = 80
-    lb_protocol       = "http"
-  }
+## 7) Terraform outputs
 
-  health_check {
-    healthy_threshold   = 2
-    unhealthy_threshold = 2
-    timeout             = 5
-    target              = "HTTP:80/"
-    interval            = 30
-  }
-}
-```
+`outputs.tf` exposes the following values:
 
-The ELB does the following:
-
-- listens on public port 80
-- forwards requests to the EC2 instances on port 80
-- performs a health check against `/`
-- routes traffic only to healthy instances
-
-## 6) Current end-to-end behavior
-
-The project currently behaves as follows:
-
-1. Terraform creates the VPC and subnet layout.
-2. Terraform creates two EC2 instances in the public subnets.
-3. The EC2 `user_data` script installs Apache and writes the sample homepage.
-4. The ELB checks the instance health on port 80.
-5. HTTP traffic is routed across the healthy web servers.
-
-This results in a simple AWS web-tier demo with a classic load balancer in front of two EC2 instances.
-
-## 7) Final status
-
-The current implementation is a single-tier AWS architecture:
-
-- VPC and subnets are provisioned in two availability zones
-- two Amazon Linux 2 EC2 instances are created in public subnets
-- Apache is installed by `user_data`
-- a classic ELB sits in front of the instances and distributes HTTP traffic
-- health checks target the web root on port 80
-
-This is the implementation currently present in the Terraform files and is the source of truth for this repository.
+| Output | Value |
+|---|---|
+| `private_ips` | Private IP addresses of the two EC2 instances |
+| `ec2_instance_ids` | IDs of the two EC2 instances |
+| `ec2_availability_zones` | Availability zones of the two EC2 instances |
+| `vpc_id` | ID of the VPC created by the module |
+| `ec2_security_group_id` | ID of the EC2 security group |
+| `elb_security_group_id` | ID of the ELB security group |
+| `elb_dns` | DNS name of the ELB |
+| `private_subnet_ids` | IDs of the private subnets |
