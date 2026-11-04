@@ -1,4 +1,4 @@
-name: Terraform first project validate
+name: Validate
 
 on:
   push:
@@ -30,3 +30,9 @@ jobs:
 
       - name: Terraform validate
         run: terraform validate
+
+      - name: Checkov
+        uses: bridgecrewio/checkov-action@v12.1347.0
+        with:
+          directory: .
+          framework: terraform
