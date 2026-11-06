@@ -5,6 +5,7 @@ resource "aws_security_group" "terraform-first-project-sg" {
   vpc_id = module.vpc.vpc_id
 
   ingress {
+    description     = "HTTP from ALB"
     from_port       = 80
     to_port         = 80
     protocol        = "tcp"
@@ -12,6 +13,7 @@ resource "aws_security_group" "terraform-first-project-sg" {
   }
 
   egress {
+    description = "Allow all outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -30,6 +32,7 @@ resource "aws_security_group" "terraform-first-project-lb-sg" {
   vpc_id = module.vpc.vpc_id
 
   ingress {
+    description = "HTTP from anywhere"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -37,6 +40,7 @@ resource "aws_security_group" "terraform-first-project-lb-sg" {
   }
 
   egress {
+    description = "Allow all outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"

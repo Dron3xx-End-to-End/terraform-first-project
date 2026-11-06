@@ -1,5 +1,16 @@
 resource "aws_lb" "terraform-first-project-lb" {
-  name            = "terraform-first-project-lb"
+  name = "terraform-first-project-lb"
+
+  #checkov:skip=CKV_AWS_52: "This is a test environment, so we can disable S3 deletion protection"
+  #checkov:skip=CKV_AWS_150: "This is a test environment, so we can disable ALB deletion protection"
+  #checkov:skip=CKV_AWS_91: "This is a test environment, so we can disable access logs"
+  #checkov:skip=CKV2_AWS_20: "This is a test environment, so we can disable redirects"
+  #checkov:skip=CKV2_AWS_28: "This is a test environment, so we can disable WAF - to be added in the future"
+
+  drop_invalid_header_fields = true
+  enable_deletion_protection = false
+  enable_http2               = true
+
   subnets         = module.vpc.public_subnets
   security_groups = [aws_security_group.terraform-first-project-lb-sg.id]
 
@@ -33,6 +44,10 @@ resource "aws_lb_target_group" "terraform-first-project-tg" {
 }
 
 resource "aws_lb_listener" "http" {
+
+  #checkov:skip=CKV_AWS_2: "This is a test environment, so we can disable HTTPS"
+  #checkov:skip=CKV_AWS_103: "This is a test environment, so we can disable SSL certificate validation"
+
   load_balancer_arn = aws_lb.terraform-first-project-lb.arn
   port              = 80
   protocol          = "HTTP"
