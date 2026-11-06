@@ -5,9 +5,9 @@ resource "aws_lb" "terraform-first-project-lb" {
 
   internal = false
 
-  tags = {
-    Project = "terraform-first-project"
-  }
+  tags = merge(local.load_balancing_tags, {
+    Role = "application-load-balancer"
+  })
 }
 
 resource "aws_lb_target_group" "terraform-first-project-tg" {
@@ -27,9 +27,9 @@ resource "aws_lb_target_group" "terraform-first-project-tg" {
     unhealthy_threshold = 2
   }
 
-  tags = {
-    Project = "terraform-first-project"
-  }
+  tags = merge(local.load_balancing_tags, {
+    Role = "target-group"
+  })
 }
 
 resource "aws_lb_listener" "http" {
@@ -42,7 +42,7 @@ resource "aws_lb_listener" "http" {
     target_group_arn = aws_lb_target_group.terraform-first-project-tg.arn
   }
 
-  tags = {
-    Project = "terraform-first-project"
-  }
+  tags = merge(local.load_balancing_tags, {
+    Role = "listener"
+  })
 }

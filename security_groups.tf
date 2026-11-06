@@ -18,9 +18,9 @@ resource "aws_security_group" "terraform-first-project-sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = {
-    Project = "terraform-first-project"
-  }
+  tags = merge(local.networking_tags, {
+    Role = "security-group"
+  })
 }
 
 resource "aws_security_group" "terraform-first-project-lb-sg" {
@@ -43,7 +43,7 @@ resource "aws_security_group" "terraform-first-project-lb-sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = {
-    Project = "terraform-first-project"
-  }
+  tags = merge(local.networking_tags, {
+    Role = "security-group"
+  })
 }

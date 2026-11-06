@@ -34,6 +34,22 @@ resource "aws_launch_template" "terraform-first-project-lt" {
         echo "<h1>Terraform first project</h1>" > /var/www/html/index.html
         EOF
   )
+
+  metadata_options {
+    http_tokens = "required"
+  }
+
+  tags = merge(local.compute_tags, {
+    Role = "launch-template"
+  })
+
+  tag_specifications {
+    resource_type = "instance"
+
+    tags = merge(local.compute_tags, {
+      Role = "ec2-instance"
+    })
+  }
 }
 
 resource "aws_autoscaling_group" "terraform-first-project-asg" {
@@ -56,6 +72,18 @@ resource "aws_autoscaling_group" "terraform-first-project-asg" {
     key                 = "Name"
     value               = "terraform-first-project-ec2"
     propagate_at_launch = true
+  }
+
+  dynamic "tag" {
+    for_each = merge(local.compute_tags, {
+      Role = "autoscaling-group"
+    })
+
+    content {
+      key                 = tag.key
+      value               = tag.value
+      propagate_at_launch = false
+    }
   }
 }
 

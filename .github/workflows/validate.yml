@@ -7,8 +7,11 @@ on:
     paths:
       - "**/*.tf"
       - ".terraform.lock.hcl"
-      - ".github/workflows/deploy.yml"
+      - ".github/workflows/validate.yml"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   Validate:
