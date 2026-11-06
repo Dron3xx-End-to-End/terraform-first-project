@@ -22,8 +22,8 @@ resource "aws_launch_template" "terraform-first-project-lt" {
 
   network_interfaces {
     associate_public_ip_address = false
+    security_groups             = [aws_security_group.terraform-first-project-sg.id]
   }
-  vpc_security_group_ids = [aws_security_group.terraform-first-project-sg.id]
 
   user_data = base64encode(<<-EOF
         #!/bin/bash

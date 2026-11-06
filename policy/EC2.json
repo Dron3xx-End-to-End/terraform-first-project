@@ -1,0 +1,306 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "EC2Describe",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:DescribeAvailabilityZones",
+                "ec2:DescribeVpcs",
+                "ec2:DescribeVpcAttribute",
+                "ec2:DescribeSubnets",
+                "ec2:DescribeInternetGateways",
+                "ec2:DescribeAddresses",
+                "ec2:DescribeNatGateways",
+                "ec2:DescribeRouteTables",
+                "ec2:DescribeNetworkAcls",
+                "ec2:DescribeSecurityGroups",
+                "ec2:DescribeImages",
+                "ec2:DescribeLaunchTemplates",
+                "ec2:DescribeLaunchTemplateVersions",
+                "ec2:DescribeInstances",
+                "ec2:DescribeTags",
+                "ec2:DescribeAddressesAttribute",
+                "ec2:DescribeSecurityGroupRules",
+                "ec2:DescribeNetworkInterfaces"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringEquals": {
+                    "aws:RequestedRegion": "eu-central-1"
+                }
+            }
+        },
+        {
+            "Sid": "EC2RunInstancesFromLaunchTemplate",
+            "Effect": "Allow",
+            "Action": "ec2:RunInstances",
+            "Resource": "*",
+            "Condition": {
+                "StringEquals": {
+                    "aws:RequestedRegion": "eu-central-1"
+                }
+            }
+        },
+        {
+            "Sid": "EC2CreateTaggedResources",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:CreateVpc",
+                "ec2:CreateInternetGateway",
+                "ec2:AllocateAddress",
+                "ec2:CreateLaunchTemplate"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringEquals": {
+                    "aws:RequestedRegion": "eu-central-1",
+                    "aws:RequestTag/Project": "terraform-first-project"
+                },
+                "ForAllValues:StringEquals": {
+                    "aws:TagKeys": [
+                        "Project",
+                        "Environment",
+                        "ManagedBy",
+                        "Component",
+                        "Role",
+                        "Name"
+                    ]
+                }
+            }
+        },
+        {
+            "Sid": "EC2CreateNatGateway",
+            "Effect": "Allow",
+            "Action": "ec2:CreateNatGateway",
+            "Resource": "arn:aws:ec2:eu-central-1:*:natgateway/*",
+            "Condition": {
+                "StringEquals": {
+                    "aws:RequestedRegion": "eu-central-1",
+                    "aws:RequestTag/Project": "terraform-first-project"
+                }
+            }
+        },
+        {
+            "Sid": "EC2CreateNatGatewayUsingProjectEIP",
+            "Effect": "Allow",
+            "Action": "ec2:CreateNatGateway",
+            "Resource": "arn:aws:ec2:eu-central-1:*:elastic-ip/*",
+            "Condition": {
+                "StringEquals": {
+                    "aws:RequestedRegion": "eu-central-1",
+                    "aws:ResourceTag/Project": "terraform-first-project"
+                }
+            }
+        },
+        {
+            "Sid": "EC2CreateTagsOnCreation",
+            "Effect": "Allow",
+            "Action": "ec2:CreateTags",
+            "Resource": "*",
+            "Condition": {
+                "StringEquals": {
+                    "aws:RequestedRegion": "eu-central-1",
+                    "aws:RequestTag/Project": "terraform-first-project"
+                },
+                "ForAllValues:StringEquals": {
+                    "aws:TagKeys": [
+                        "Project",
+                        "Environment",
+                        "ManagedBy",
+                        "Component",
+                        "Role",
+                        "Name"
+                    ]
+                },
+                "StringLike": {
+                    "ec2:CreateAction": [
+                        "CreateVpc",
+                        "CreateSubnet",
+                        "CreateInternetGateway",
+                        "AllocateAddress",
+                        "CreateNatGateway",
+                        "CreateRouteTable",
+                        "CreateSecurityGroup",
+                        "CreateLaunchTemplate",
+                        "RunInstances"
+                    ]
+                }
+            }
+        },
+        {
+            "Sid": "EC2ModifyProjectResources",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:ModifyVpcAttribute",
+                "ec2:DeleteVpc",
+                "ec2:ModifySubnetAttribute",
+                "ec2:DeleteSubnet",
+                "ec2:AttachInternetGateway",
+                "ec2:DetachInternetGateway",
+                "ec2:DeleteInternetGateway",
+                "ec2:ReleaseAddress",
+                "ec2:DisassociateAddress",
+                "ec2:DeleteNatGateway",
+                "ec2:AssociateRouteTable",
+                "ec2:DisassociateRouteTable",
+                "ec2:DeleteRouteTable",
+                "ec2:CreateRoute",
+                "ec2:DeleteRoute",
+                "ec2:ReplaceRoute",
+                "ec2:DeleteSecurityGroup",
+                "ec2:AuthorizeSecurityGroupIngress",
+                "ec2:AuthorizeSecurityGroupEgress",
+                "ec2:RevokeSecurityGroupIngress",
+                "ec2:RevokeSecurityGroupEgress",
+                "ec2:DeleteLaunchTemplate",
+                "ec2:ModifyLaunchTemplate",
+                "ec2:CreateLaunchTemplateVersion",
+                "ec2:DeleteLaunchTemplateVersions",
+                "ec2:ReplaceNetworkAclAssociation"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringEquals": {
+                    "aws:RequestedRegion": "eu-central-1",
+                    "aws:ResourceTag/Project": "terraform-first-project"
+                }
+            }
+        },
+        {
+            "Sid": "EC2ManageTagsOnProjectResources",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:CreateTags",
+                "ec2:DeleteTags"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringEquals": {
+                    "aws:RequestedRegion": "eu-central-1",
+                    "aws:ResourceTag/Project": "terraform-first-project"
+                },
+                "ForAllValues:StringEquals": {
+                    "aws:TagKeys": [
+                        "Environment",
+                        "ManagedBy",
+                        "Component",
+                        "Role",
+                        "Name"
+                    ]
+                }
+            }
+        },
+        {
+            "Sid": "EC2CreateResourcesInProjectVpc",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:CreateSubnet",
+                "ec2:CreateRouteTable",
+                "ec2:CreateSecurityGroup"
+            ],
+            "Resource": "arn:aws:ec2:eu-central-1:*:vpc/*",
+            "Condition": {
+                "StringEquals": {
+                    "aws:RequestedRegion": "eu-central-1",
+                    "aws:ResourceTag/Project": "terraform-first-project"
+                }
+            }
+        },
+        {
+            "Sid": "EC2TagVpcDefaults",
+            "Effect": "Allow",
+            "Action": "ec2:CreateTags",
+            "Resource": [
+                "arn:aws:ec2:eu-central-1:*:security-group/*",
+                "arn:aws:ec2:eu-central-1:*:route-table/*",
+                "arn:aws:ec2:eu-central-1:*:network-acl/*"
+            ],
+            "Condition": {
+                "StringEquals": {
+                    "aws:RequestedRegion": "eu-central-1",
+                    "aws:RequestTag/Project": "terraform-first-project"
+                },
+                "ForAllValues:StringEquals": {
+                    "aws:TagKeys": [
+                        "Project",
+                        "Environment",
+                        "ManagedBy",
+                        "Component",
+                        "Role",
+                        "Name"
+                    ]
+                }
+            }
+        },
+        {
+            "Sid": "EC2ManageProjectVpcDefaultNetworkAclEntries",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:DeleteNetworkAclEntry"
+            ],
+            "Resource": "arn:aws:ec2:eu-central-1:*:network-acl/*",
+            "Condition": {
+                "StringEquals": {
+                    "aws:RequestedRegion": "eu-central-1"
+                }
+            }
+        },
+        {
+            "Sid": "EC2CreateTaggedVpcChildren",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:CreateSubnet",
+                "ec2:CreateRouteTable",
+                "ec2:CreateSecurityGroup"
+            ],
+            "Resource": [
+                "arn:aws:ec2:eu-central-1:*:subnet/*",
+                "arn:aws:ec2:eu-central-1:*:route-table/*",
+                "arn:aws:ec2:eu-central-1:*:security-group/*"
+            ],
+            "Condition": {
+                "StringEquals": {
+                    "aws:RequestedRegion": "eu-central-1",
+                    "aws:RequestTag/Project": "terraform-first-project"
+                },
+                "ForAllValues:StringEquals": {
+                    "aws:TagKeys": [
+                        "Project",
+                        "Environment",
+                        "ManagedBy",
+                        "Component",
+                        "Role",
+                        "Name"
+                    ]
+                }
+            }
+        },
+        {
+            "Sid": "EC2CreateNatGatewayInProjectSubnet",
+            "Effect": "Allow",
+            "Action": "ec2:CreateNatGateway",
+            "Resource": "arn:aws:ec2:eu-central-1:*:subnet/*",
+            "Condition": {
+                "StringEquals": {
+                    "aws:RequestedRegion": "eu-central-1",
+                    "aws:ResourceTag/Project": "terraform-first-project"
+                }
+            }
+        },
+        {
+            "Sid": "EC2ManageNetworkAclEntriesInRegion",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:CreateNetworkAclEntry",
+                "ec2:ReplaceNetworkAclEntry"
+            ],
+            "Resource": "arn:aws:ec2:eu-central-1:*:network-acl/*",
+            "Condition": {
+                "StringEquals": {
+                    "aws:RequestedRegion": "eu-central-1"
+                }
+            }
+        }
+    ]
+}

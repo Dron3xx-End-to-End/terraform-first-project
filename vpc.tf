@@ -1,5 +1,10 @@
 data "aws_availability_zones" "available" {
   state = "available"
+
+  filter {
+    name   = "zone-type"
+    values = ["availability-zone"]
+  }
 }
 
 module "vpc" {
@@ -8,7 +13,12 @@ module "vpc" {
   name = "terraform-first-project-vpc"
   cidr = var.vpc_cidr
 
-  azs             = slice(data.aws_availability_zones.available.names, 0, length(var.private_subnet_cidrs))
+  azs = slice(
+    data.aws_availability_zones.available.names,
+    0,
+    length(var.private_subnet_cidrs)
+  )
+
   private_subnets = var.private_subnet_cidrs
   public_subnets  = var.public_subnet_cidrs
 
