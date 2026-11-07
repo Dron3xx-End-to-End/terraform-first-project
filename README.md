@@ -2,92 +2,188 @@
 
 ## Overview
 
-This repository provisions an AWS web application stack using Terraform. A public Application Load Balancer (ALB) sends HTTP traffic to web servers managed by an Auto Scaling Group (ASG) in private subnets. The instances are launched from a launch template, have no public IP addresses, and install Apache through `user_data`.
+This repository contains two separate parts:
 
-The VPC module creates public and private subnets, an Internet Gateway, and one NAT Gateway per Availability Zone for outbound connectivity from private subnets.
+1.  **AWS infrastructure**, provisioned with Terraform: a public
+    Application Load Balancer (ALB) forwards HTTP traffic to Apache web
+    servers managed by an Auto Scaling Group (ASG) in private subnets.
+2.  **Local monitoring**, started with Docker Compose: Prometheus
+    scrapes Node Exporter metrics and Grafana visualizes the data.
+
+The local monitoring stack does not depend on deployed AWS resources.
 
 ## Technologies
 
-- Terraform
-- AWS VPC, EC2, Auto Scaling, and Application Load Balancer
-- Apache HTTP Server
-
-## Requirements
-
-- Terraform 1.9.0 or newer
-- AWS CLI configured with the `terraform-first-project` profile
-- An AWS account with permissions to create VPC, NAT Gateway, EC2, Auto Scaling, and ALB resources
-
-## Deployment
-
-From the project root:
-
-```bash
-terraform init
-terraform validate
-terraform plan
-terraform apply
-```
-
-To tear the infrastructure down:
-
-```bash
-terraform destroy
-```
-
-Review the plan before applying it. **Deploying this infrastructure can incur AWS charges, particularly for NAT Gateways and the ALB.** Review current AWS pricing and destroy resources when they are no longer needed.
+-   Terraform, AWS VPC, EC2, Auto Scaling, Application Load Balancer
+-   Apache HTTP Server
+-   Docker, Docker Compose, Prometheus, Grafana, Node Exporter
 
 ## Repository Structure
 
-```text
+``` text
 terraform-first-project/
-├── alb.tf
-├── ec2.tf
-├── outputs.tf
-├── providers.tf
-├── README.md
-├── explained.md
-├── security_groups.tf
-├── variables.tf
-├── vpc.tf
+├── monitoring/
+│   ├── docker-compose.yml
+│   ├── grafana/
+│   │   └── provisioning/
+│   │       └── datasources/
+│   │           └── prometheus.yml
+│   └── prometheus/
+│       └── prometheus.yml
+├── terraform/
+│   ├── alb.tf
+│   ├── ec2.tf
+│   ├── outputs.tf
+│   ├── providers.tf
+│   ├── security_groups.tf
+│   ├── variables.tf
+│   └── vpc.tf
 ├── .gitignore
-└── .terraform.lock.hcl
+├── README.md
+└── explained.md
 ```
 
-Terraform state and other generated local files are not included in this listing.
+## AWS Infrastructure
 
-## Current Infrastructure
+The Terraform configuration defines:
 
-The configuration defines:
+-   A VPC (default CIDR `10.0.0.0/16`) with public and private subnets.
+-   An Internet Gateway and one NAT Gateway per selected Availability
+    Zone.
+-   A public ALB with an HTTP listener on port 80.
+-   An ASG that launches EC2 instances in private subnets.
+-   A launch template using the latest matching Amazon Linux 2023 x86_64
+    AMI.
+-   Apache installation and a sample homepage configured through
+    `user_data`.
 
-- A VPC with a default CIDR of `10.0.0.0/16`.
-- Public and private subnet CIDRs configurable through input variables. The defaults provide two of each, in dynamically selected available Availability Zones.
-- An Internet Gateway and a NAT Gateway in each Availability Zone. Private subnets use NAT for outbound internet access.
-- A launch template using the latest matching Amazon Linux 2023 x86_64 AMI and the configurable EC2 instance type (default `t3.micro`).
-- An Auto Scaling Group in the private subnets. Its default minimum, desired, and maximum capacities are 1, 2, and 2 instances.
-- A public ALB with an HTTP listener on port 80, forwarding to an HTTP target group on port 80. The target group checks `/` and expects status `200`.
-- An EC2 security group that allows inbound HTTP only from the ALB security group. The ALB security group allows inbound HTTP on port 80 from the internet.
+Defaults include EC2 instance type `t3.micro` and ASG capacities of
+minimum 1, desired 2, maximum 2.
 
-The ASG registers its instances with the ALB target group. No standalone `aws_instance` resource is defined.
+### Traffic flow
+
+``` text
+Internet --HTTP:80--> Public ALB --HTTP:80--> EC2 instances in private subnets
+```
+
+The ALB security group allows inbound HTTP from the internet. The EC2
+security group allows inbound HTTP only from the ALB security group.
+Instances have no public IP addresses and no inbound SSH rule is
+configured.
+
+## Requirements
+
+### AWS / Terraform
+
+-   Terraform 1.9.0 or newer.
+-   AWS CLI configured with the `terraform-first-project` profile.
+-   An AWS account with permissions to create the configured resources.
+
+### Local monitoring
+
+-   Docker Desktop or another Docker Engine installation.
+-   Docker Compose v2.
+
+## Deploying AWS Infrastructure
+
+Run commands from the repository root using Terraform's `-chdir` option:
+
+``` bash
+terraform -chdir=terraform init
+terraform -chdir=terraform validate
+terraform -chdir=terraform plan
+terraform -chdir=terraform apply
+```
+
+To remove the infrastructure:
+
+``` bash
+terraform -chdir=terraform destroy
+```
+
+Review the plan before applying it. **AWS deployment can incur
+charges**, particularly NAT Gateway and ALB charges. Check current AWS
+pricing and destroy resources when they are no longer needed. Verify
+that billable resources have been removed.
+
+## Running Local Monitoring
+
+From the repository root:
+
+``` bash
+cd monitoring
+docker compose up -d
+docker compose ps
+```
+
+  -------------------------------------------------------------------------------
+  Service                 Local address                   Purpose
+  ----------------------- ------------------------------- -----------------------
+  Prometheus              http://localhost:9090           Scrapes and stores
+                                                          metrics
+
+  Grafana                 http://localhost:3000           Queries and visualizes
+                                                          metrics
+
+  Node Exporter           http://localhost:9100/metrics   Exposes system metrics
+  -------------------------------------------------------------------------------
+
+The current local development credentials for Grafana are `admin` /
+`admin`. Do not use these credentials in a shared or production
+environment.
+
+### Metrics flow
+
+``` text
+Node Exporter --HTTP scrape--> Prometheus <--PromQL queries-- Grafana
+```
+
+Prometheus periodically scrapes `node-exporter:9100` over the internal
+Docker network. Grafana queries Prometheus at `http://prometheus:9090`.
+The Compose file uses named volumes for Prometheus and Grafana data.
+
+The Node Exporter container receives host paths through bind mounts. The
+metrics visible depend on the Docker host and mounted paths. With Docker
+Desktop and WSL2, do not assume these metrics fully represent the
+Windows host or every WSL distribution without verifying the result.
+
+To stop the stack:
+
+``` bash
+docker compose down
+```
+
+To also delete persistent Prometheus and Grafana data:
+
+``` bash
+docker compose down -v
+```
+
+**Warning:** `docker compose down -v` removes the named data volumes.
 
 ## Terraform Outputs
 
-After applying the configuration, Terraform exposes:
+The Terraform configuration exposes:
 
-- `private_ips` — private IP addresses returned by the EC2 instance lookup
-- `ec2_instance_ids` — instance IDs returned by the EC2 instance lookup
-- `ec2_availability_zones` — Availability Zones associated with the Auto Scaling Group
-- `vpc_id` — ID of the VPC
-- `ec2_security_group_id` — ID of the EC2 security group
-- `alb_security_group_id` — ID of the ALB security group
-- `alb_dns` — DNS name of the ALB
-- `private_subnet_ids` — IDs of the private subnets
+-   `private_ips` --- private IP addresses returned by the EC2 instance
+    lookup.
+-   `ec2_instance_ids` --- instance IDs returned by the EC2 instance
+    lookup.
+-   `ec2_availability_zones` --- Availability Zones associated with the
+    ASG.
+-   `vpc_id` --- VPC ID.
+-   `ec2_security_group_id` --- EC2 security group ID.
+-   `alb_security_group_id` --- ALB security group ID.
+-   `alb_dns` --- ALB DNS name.
+-   `private_subnet_ids` --- private subnet IDs.
 
-The EC2 lookup used for `private_ips` and `ec2_instance_ids` filters by the VPC ID (`module.vpc.vpc_id`) and the Auto Scaling Group name.
+The EC2 lookup filters instances by VPC ID and Auto Scaling Group name.
 
-## Notes
+## Current Scope and Future Work
 
-- The launch template's startup script updates Amazon Linux, installs and enables Apache, and writes a sample page to `/var/www/html/index.html`.
-- The EC2 instances have no public IP addresses and no inbound SSH rule is configured.
-- The ALB health check routes traffic only to healthy targets.
-- `variables.tf` contains configurable region, instance type, scaling limits, and subnet/VPC CIDRs, together with input validations.
+The local monitoring stack is not integrated with AWS monitoring.
+CloudWatch integration and AWS WAF are future extensions, not
+implemented features.
+
+The current ALB uses HTTP on port 80. HTTPS, access logging, WAF, and
+additional production-hardening measures remain future work.
