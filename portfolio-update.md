@@ -14,21 +14,19 @@ Projekt Terraform
 
 ### English
 
-AWS infrastructure managed with Terraform.
+AWS infrastructure provisioned with Terraform and monitored with Prometheus.
 
 ### Polski
 
-Infrastruktura AWS zarządzana przez Terraform.
+Infrastruktura AWS tworzona za pomocą Terraform i monitorowana przez Prometheus.
 
 ## Technologies
 
 - Terraform
-- AWS
-- Amazon EC2
-- Amazon VPC
-- Application Load Balancer (ALB)
-- Auto Scaling Group
-- NAT Gateway
+- AWS (EC2, VPC, ALB, ASG, NAT)
+- Prometheus
+- Grafana
+- Alertmanager
 
 ## Status
 

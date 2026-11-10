@@ -1,0 +1,22 @@
+route:
+  receiver: 'default'
+  group_by: ['alertname', 'instance']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+  routes:
+    - matchers:
+        - severity="warning"
+      receiver: 'warning'
+
+    - matchers:
+        - severity="critical"
+      receiver: 'critical'
+
+receivers:
+  - name: 'default'
+
+  - name: 'warning'
+
+  - name: 'critical'

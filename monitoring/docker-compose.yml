@@ -4,7 +4,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus:/etc/prometheus
       - prometheus-data:/prometheus
     networks:
       - monitoring
@@ -38,10 +38,21 @@ services:
     networks:
       - monitoring
 
+  alertmanager:
+    image: prom/alertmanager:latest
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager:/etc/alertmanager
+      - alertmanager-data:/alertmanager
+    networks:
+      - monitoring
+
 
 volumes:
   grafana-data:
   prometheus-data:
+  alertmanager-data:
 
 networks:
   monitoring:
