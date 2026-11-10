@@ -139,33 +139,32 @@ implemented features.
 ## 8. Components and responsibilities
 
 The local stack is defined in `monitoring/docker-compose.yml` and
-contains three services:
+contains four services:
 
 **Node Exporter** - Collects and exposes system metrics over HTTP on
-port `9100`. - Makes metrics available at `/metrics`.
+port `9100`, making metrics available at `/metrics`.
 
-**Prometheus** - Periodically scrapes configured targets. - Stores
-collected time-series data. - Provides a query interface using PromQL. -
-Uses `monitoring/prometheus/prometheus.yml` for scrape configuration.
+**Prometheus** - Periodically scrapes configured targets, stores
+collected time-series data, provides a query interface using PromQL, and
+evaluates alert rules. Its configuration is in
+`monitoring/prometheus/prometheus.yml`.
 
-**Grafana** - Queries Prometheus as a data source. - Visualizes metrics
-in dashboards and panels. - Can load data-source configuration from its
-provisioning directory.
+**Alertmanager** - Receives alerts from Prometheus, groups related
+alerts, and routes them according to their labels. Its configuration is
+in `monitoring/alertmanager/alertmanager.yml`.
+
+**Grafana** - Queries Prometheus as a data source and visualizes metrics
+in dashboards and panels. Provisioning files configure its Prometheus
+data source and load dashboard files.
 
 ## 9. Monitoring data flow
 
 ``` text
-+---------------+       HTTP scrape       +------------+
-| Node Exporter | -----------------------> | Prometheus |
-|     :9100     |                          |   :9090    |
-+---------------+                          +------------+
-                                                  ^
-                                                  | PromQL queries
-                                                  |
-                                            +-----------+
-                                            |  Grafana  |
-                                            |   :3000   |
-                                            +-----------+
+Node Exporter --HTTP scrape--> Prometheus --alerts--> Alertmanager
+                                  ^
+                                  | PromQL queries
+                                  |
+                               Grafana
 ```
 
 The current Prometheus configuration uses a global scrape interval of 15
@@ -176,12 +175,85 @@ network can resolve one another through Docker's internal DNS.
 `localhost` inside the Prometheus container would refer to that
 Prometheus container, not the Node Exporter container.
 
-Grafana uses `http://prometheus:9090` to query Prometheus. In this
-setup, Grafana does not scrape Node Exporter directly.
+Prometheus evaluates its configured alert rules and sends resulting
+alerts to Alertmanager. Grafana uses `http://prometheus:9090` to query
+Prometheus; it does not scrape Node Exporter directly.
 
-## 10. Networking, ports, and storage
+## 10. Alert rules
 
-All three services join the Compose network named `monitoring`. The
+The alert rules are in
+`monitoring/prometheus/rules/system-alerts.yml`. Prometheus loads this
+file through the `rule_files` entry in
+`monitoring/prometheus/prometheus.yml`.
+
+The five rules are:
+
+-   **HighCPUUsage** - Fires when average CPU usage exceeds 80% for
+    5 minutes.
+-   **HighMemoryUsage** - Fires when memory usage exceeds 80% for
+    5 minutes.
+-   **HighSwapUsage** - Fires when swap usage exceeds 80% for 5 minutes.
+    The expression also requires `node_memory_SwapTotal_bytes > 0`, so
+    it does not divide by zero or report swap usage when no swap exists.
+-   **InstanceDown** - Fires when `up == 0` remains true for 1 minute.
+    Prometheus sets `up` to 0 when a target scrape fails.
+-   **LowMemoryAvailable** - Fires when available memory is below
+    2 GiB for 5 minutes.
+
+The `for` field requires the condition to remain true for the specified
+duration before the alert fires; this avoids firing on brief spikes.
+`labels` attach metadata such as `severity`, which Alertmanager uses for
+routing. `annotations` provide human-readable details such as summaries
+and descriptions; their templates can use labels like
+`{{ $labels.instance }}`.
+
+## 11. Alertmanager
+
+`monitoring/alertmanager/alertmanager.yml` configures Alertmanager,
+which receives alerts from Prometheus, groups related alerts, and routes
+them to receivers. The main route uses the `default` receiver as a
+fallback. Child routes match the `severity` label and send `warning`
+alerts to the `warning` receiver and `critical` alerts to the
+`critical` receiver.
+
+A route is the rule that determines where an alert goes; a receiver is
+the destination configuration selected by that route. The current file
+defines the `default`, `warning`, and `critical` receivers, but none has
+an email or other notification channel configured yet.
+
+Alerts are grouped by `alertname` and `instance`. `group_wait: 30s`
+delays the first notification for a new group so related alerts can
+arrive together. `group_interval: 5m` sets the wait between
+notifications when a group changes, and `repeat_interval: 4h` sets how
+long to wait before repeating an unchanged alert group.
+
+## 12. Prometheus integration
+
+`monitoring/prometheus/prometheus.yml` includes `rule_files` pointing to
+`rules/system-alerts.yml`, relative to the Prometheus configuration
+file. Its `alerting` section configures the Alertmanager target as
+`alertmanager:9093`.
+
+The Compose service name `alertmanager` resolves through Docker's
+internal DNS on the shared network. Prometheus runs in its own
+container, so `localhost:9093` would refer to the Prometheus container
+itself, not the Alertmanager container.
+
+## 13. Grafana
+
+The current provisioned dashboard is **System Monitoring**, stored in
+`monitoring/grafana/provisioning/dashboards/system-monitoring.json`. It
+has panels for CPU, RAM Usage, RAM Available, and SWAP.
+
+The provisioning file
+`monitoring/grafana/provisioning/datasources/prometheus.yml` adds
+Prometheus at `http://prometheus:9090` as Grafana's default data source.
+`monitoring/grafana/provisioning/dashboards/dashboards.yml` tells Grafana
+to load dashboard files from the provisioning dashboards directory.
+
+## 14. Networking, ports, and storage
+
+All four services join the Compose network named `monitoring`. The
 Compose file publishes:
 
   Service           Container port   Host port
@@ -189,16 +261,17 @@ Compose file publishes:
   Prometheus                  9090        9090
   Grafana                     3000        3000
   Node Exporter               9100        9100
+  Alertmanager                9093        9093
 
-Named volumes store Prometheus and Grafana data so it can survive
-ordinary container recreation.
+Named volumes store Prometheus, Grafana, and Alertmanager data so it can
+survive ordinary container recreation.
 
 Node Exporter receives host paths through bind mounts. The metrics
 visible depend on the host paths and Docker environment. With Docker
 Desktop using WSL2, do not assume the metrics provide a complete view of
 Windows or every WSL distribution without checking.
 
-## 11. Starting and stopping the stack
+## 15. Starting and stopping the stack
 
 From the repository root:
 
@@ -214,6 +287,7 @@ Local endpoints:
 -   Prometheus targets: `http://localhost:9090/targets`
 -   Node Exporter metrics: `http://localhost:9100/metrics`
 -   Grafana: `http://localhost:3000`
+-   Alertmanager: `http://localhost:9093`
 
 The current development credentials are `admin` / `admin`. They are not
 appropriate for a shared or production environment.
@@ -230,9 +304,10 @@ Also remove named data volumes:
 docker compose down -v
 ```
 
-The `-v` option deletes persistent Prometheus and Grafana data.
+The `-v` option deletes persistent Prometheus, Grafana, and Alertmanager
+data.
 
-## 12. The Prometheus `up` metric
+## 16. The Prometheus `up` metric
 
 The `up` metric reports the result of the latest scrape for each target:
 
@@ -246,15 +321,15 @@ instance, for example `job="Node Exporter"` and
 `up` reports scrape connectivity. It is not a CPU, memory, or
 application-health measurement.
 
-## 13. Current scope and future work
+## 17. Current scope and future work
 
 The monitoring environment is currently a local learning stack and is
 not integrated with AWS monitoring.
 
 Potential future extensions include CloudWatch metrics and alarms,
-secured connectivity to AWS-hosted workloads, dashboards for
-CPU/memory/filesystem/network metrics, and hardening credentials,
-published ports, and image versions.
+secured connectivity to AWS-hosted workloads, additional dashboards for
+filesystem and network metrics, and hardening credentials, published
+ports, and image versions.
 
 AWS WAF is also future infrastructure work. Neither WAF nor CloudWatch
 integration should be understood as implemented by the current project.

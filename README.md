@@ -8,7 +8,8 @@ This repository contains two separate parts:
     Application Load Balancer (ALB) forwards HTTP traffic to Apache web
     servers managed by an Auto Scaling Group (ASG) in private subnets.
 2.  **Local monitoring**, started with Docker Compose: Prometheus
-    scrapes Node Exporter metrics and Grafana visualizes the data.
+    scrapes Node Exporter metrics, evaluates alert rules, and forwards
+    alerts to Alertmanager, while Grafana visualizes the data.
 
 The local monitoring stack does not depend on deployed AWS resources.
 
@@ -16,31 +17,55 @@ The local monitoring stack does not depend on deployed AWS resources.
 
 -   Terraform, AWS VPC, EC2, Auto Scaling, Application Load Balancer
 -   Apache HTTP Server
--   Docker, Docker Compose, Prometheus, Grafana, Node Exporter
+-   Docker, Docker Compose, Prometheus, Alertmanager, Grafana, Node
+    Exporter
 
 ## Repository Structure
 
 ``` text
 terraform-first-project/
+├── .github/
+│   └── workflows/
+│       ├── portfolio-notify.yml
+│       └── validate.yml
+├── .vscode/
+│   ├── schemas/
+│   │   └── grafana-datasource.schema.json
+│   └── settings.json
 ├── monitoring/
+│   ├── alertmanager/
+│   │   └── alertmanager.yml
 │   ├── docker-compose.yml
 │   ├── grafana/
 │   │   └── provisioning/
+│   │       ├── dashboards/
+│   │       │   ├── dashboards.yml
+│   │       │   └── system-monitoring.json
 │   │       └── datasources/
 │   │           └── prometheus.yml
 │   └── prometheus/
-│       └── prometheus.yml
+│       ├── prometheus.yml
+│       └── rules/
+│           └── system-alerts.yml
+├── policy/
+│   ├── ASG.json
+│   ├── EC2.json
+│   └── ELB.json
 ├── terraform/
 │   ├── alb.tf
 │   ├── ec2.tf
+│   ├── locals.tf
 │   ├── outputs.tf
 │   ├── providers.tf
 │   ├── security_groups.tf
 │   ├── variables.tf
-│   └── vpc.tf
+│   ├── vpc.tf
+│   └── .terraform.lock.hcl
 ├── .gitignore
+├── .gitattributes
 ├── README.md
-└── explained.md
+├── explained.md
+└── portfolio-update.md
 ```
 
 ## AWS Infrastructure
@@ -120,12 +145,16 @@ docker compose ps
   Service                 Local address                   Purpose
   ----------------------- ------------------------------- -----------------------
   Prometheus              http://localhost:9090           Scrapes and stores
-                                                          metrics
+                                                          metrics and evaluates
+                                                          alert rules
 
   Grafana                 http://localhost:3000           Queries and visualizes
                                                           metrics
 
   Node Exporter           http://localhost:9100/metrics   Exposes system metrics
+
+  Alertmanager            http://localhost:9093           Groups and routes
+                                                          alerts
   -------------------------------------------------------------------------------
 
 The current local development credentials for Grafana are `admin` /
@@ -135,12 +164,32 @@ environment.
 ### Metrics flow
 
 ``` text
-Node Exporter --HTTP scrape--> Prometheus <--PromQL queries-- Grafana
+Node Exporter --metrics--> Prometheus --alerts--> Alertmanager
+                                ^
+                                | PromQL queries
+                                |
+                             Grafana
 ```
 
-Prometheus periodically scrapes `node-exporter:9100` over the internal
-Docker network. Grafana queries Prometheus at `http://prometheus:9090`.
-The Compose file uses named volumes for Prometheus and Grafana data.
+Node Exporter exposes host metrics. Prometheus periodically scrapes
+`node-exporter:9100`, stores the metrics, and evaluates its alert rules.
+It sends firing alerts to Alertmanager, which groups and routes them by
+the `severity` label. The `default` receiver is the fallback; `warning`
+and `critical` receivers handle alerts with matching severity values.
+These receivers do not yet have email or other external notification
+channels configured.
+
+Grafana queries Prometheus at `http://prometheus:9090` and visualizes
+the metrics. The Compose file uses named volumes for Prometheus,
+Alertmanager, and Grafana data.
+
+### Alert rules
+
+-   `HighCPUUsage` and `HighMemoryUsage` warn when usage exceeds 80%.
+-   `HighSwapUsage` warns when swap usage exceeds 80%, if swap is present.
+-   `InstanceDown` is critical when a monitored target is unreachable.
+-   `LowMemoryAvailable` warns when less than 2 GiB of memory is
+    available.
 
 The Node Exporter container receives host paths through bind mounts. The
 metrics visible depend on the Docker host and mounted paths. With Docker
