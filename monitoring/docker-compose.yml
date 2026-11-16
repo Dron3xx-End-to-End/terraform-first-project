@@ -45,6 +45,7 @@ services:
     volumes:
       - ./alertmanager:/etc/alertmanager
       - alertmanager-data:/alertmanager
+      - ./secrets:/etc/alertmanager/secrets:ro
     networks:
       - monitoring
 

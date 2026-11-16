@@ -39,3 +39,4 @@ terraform.rc
 # Local files
 *.tfplan
 tfplan
+/monitoring/secrets

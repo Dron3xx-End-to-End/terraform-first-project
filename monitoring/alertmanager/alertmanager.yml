@@ -1,3 +1,11 @@
+global:
+  smtp_smarthost: 'smtp.poczta.onet.pl:465'
+  smtp_from: 'monitoringtest@op.pl'
+  smtp_hello: 'localhost'
+  smtp_require_tls: true
+  smtp_auth_username: 'monitoringtest@op.pl'
+  smtp_auth_password_file: '/etc/alertmanager/secrets/smtp_password.txt'
+
 route:
   receiver: 'default'
   group_by: ['alertname', 'instance']
@@ -18,5 +26,11 @@ receivers:
   - name: 'default'
 
   - name: 'warning'
+    email_configs:
+      - to: 'dawid.bronikowski@onet.eu'
+        send_resolved: true
 
   - name: 'critical'
+    email_configs:
+      - to: 'dawid.bronikowski@onet.eu'
+        send_resolved: true
