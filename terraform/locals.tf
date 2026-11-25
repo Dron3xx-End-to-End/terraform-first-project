@@ -1,4 +1,11 @@
 locals {
+  monitoring_endpoint_services = toset([
+    "ssm",
+    "ssmmessages"
+  ])
+}
+
+locals {
   project_tags = {
     Project     = "terraform-first-project"
     Environment = "dev"
