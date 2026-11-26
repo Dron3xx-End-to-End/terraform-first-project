@@ -40,3 +40,4 @@ terraform.rc
 *.tfplan
 tfplan
 /monitoring/secrets
+monitoring-aws/secrets/smtp_password.txt

@@ -12,5 +12,9 @@ resource "aws_autoscaling_group" "monitoring" {
   health_check_type         = "EC2"
   health_check_grace_period = 300
 
-  vpc_zone_identifier = [aws_subnet.monitoring.id]
+  vpc_zone_identifier = module.vpc.private_subnets
+  
+  depends_on = [
+    aws_iam_role_policy.monitoring-role-policy
+  ]
 }

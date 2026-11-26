@@ -1,0 +1,27 @@
+global:
+  scrape_interval: 15s
+
+rule_files:
+  - rules/system-alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - 'alertmanager:9093'
+
+scrape_configs:
+  - job_name: 'application-node-exporter'
+
+    ec2_sd_configs:
+      - region: eu-central-1
+        port: 9100
+        refresh_interval: 60s
+        filters:
+          - name: instance-state-name
+            values:
+              - running
+
+          - name: tag:aws:autoscaling:groupName
+            values:
+              - terraform-first-project-asg

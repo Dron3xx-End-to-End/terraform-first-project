@@ -25,14 +25,54 @@ resource "aws_launch_template" "terraform-first-project-lt" {
     security_groups             = [aws_security_group.terraform-first-project-sg.id]
   }
 
-  user_data = base64encode(<<-EOF
+  user_data = base64encode(<<-USER_DATA
         #!/bin/bash
+        set -euo pipefail
         dnf update -y
-        dnf install -y httpd
+        dnf install -y httpd curl
         systemctl start httpd
         systemctl enable httpd
         echo "<h1>Terraform first project</h1>" > /var/www/html/index.html
-        EOF
+
+        if ! id -u node_exporter >/dev/null 2>&1; then
+          useradd --system --no-create-home -s /sbin/nologin node_exporter
+        fi
+
+        if [ ! -f /usr/local/bin/node_exporter ]; then
+          mkdir -p /tmp/node_exporter
+          trap 'rm -rf /tmp/node_exporter' EXIT
+
+          curl -fL https://github.com/prometheus/node_exporter/releases/download/v1.13.1/node_exporter-1.13.1.linux-amd64.tar.gz \
+               -o /tmp/node_exporter/node_exporter-1.13.1.linux-amd64.tar.gz
+
+          curl -fL https://github.com/prometheus/node_exporter/releases/download/v1.13.1/sha256sums.txt \
+               -o /tmp/node_exporter/sha256sums.txt
+
+          (cd /tmp/node_exporter && grep " node_exporter-1.13.1.linux-amd64.tar.gz" sha256sums.txt | sha256sum -c -)
+
+          tar xvfz /tmp/node_exporter/node_exporter-1.13.1.linux-amd64.tar.gz -C /tmp/node_exporter
+          install -o root -g root -m 0755 /tmp/node_exporter/node_exporter-1.13.1.linux-amd64/node_exporter /usr/local/bin/node_exporter          
+        fi
+
+        cat <<'NODE_SERVICE' >/etc/systemd/system/node-exporter.service
+        [Unit]
+        Description=Node Exporter
+        Wants=network-online.target
+        After=network-online.target
+
+        [Service]
+        User=node_exporter
+        Group=node_exporter
+        ExecStart=/usr/local/bin/node_exporter --web.listen-address=:9100
+        Restart=on-failure
+        RestartSec=5s
+
+        [Install]
+        WantedBy=multi-user.target
+        NODE_SERVICE
+        systemctl daemon-reload
+        systemctl enable --now node-exporter
+        USER_DATA
   )
 
   metadata_options {

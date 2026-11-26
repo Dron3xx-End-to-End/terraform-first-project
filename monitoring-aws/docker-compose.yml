@@ -1,0 +1,46 @@
+services:
+  prometheus:
+    image: prom/prometheus:3.16.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./prometheus:/etc/prometheus
+      - prometheus-data:/prometheus
+    networks:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:13.2.2
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - ./grafana:/etc/grafana/provisioning
+      - grafana-data:/var/lib/grafana
+    networks:
+      - monitoring
+
+  alertmanager:
+    image: prom/alertmanager:0.35.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./alertmanager:/etc/alertmanager
+      - alertmanager-data:/alertmanager
+      - ./secrets:/etc/alertmanager/secrets:ro
+    networks:
+      - monitoring
+
+
+volumes:
+  grafana-data:
+  prometheus-data:
+  alertmanager-data:
+
+networks:
+  monitoring:

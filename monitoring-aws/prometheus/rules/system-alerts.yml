@@ -1,0 +1,56 @@
+groups:
+  - name: system-alerts
+    rules:
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage detected on instance {{ $labels.instance }}"
+          description: "CPU usage is above 80% for more than 5 minutes."
+
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage detected on instance {{ $labels.instance }}"
+          description: "Memory usage is above 80% for more than 5 minutes."
+      
+      - alert: HighSwapUsage
+        expr: > 
+          (
+            1 - (
+              node_memory_SwapFree_bytes
+              /
+              node_memory_SwapTotal_bytes
+            )
+          ) * 100 > 80
+          and
+          (node_memory_SwapTotal_bytes > 0)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High swap usage detected on instance {{ $labels.instance }}"
+          description: "Swap usage is above 80% for more than 5 minutes."
+
+      - alert: InstanceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instance {{ $labels.instance }} is down"
+          description: "The instance has been down for more than 1 minute."
+
+      - alert: LowMemoryAvailable
+        expr: node_memory_MemAvailable_bytes / 1024^3 < 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low memory available on instance {{ $labels.instance }}"
+          description: "Available memory is below 2GiB for more than 5 minutes."
